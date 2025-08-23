@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #define MAX_LEN_IN 2048
 #define MAX_ARG 100 
@@ -10,32 +10,39 @@
 
 int getArgs(char* argv[]);
 
-void* thread_exec(void* arg){
+int main(int argc, char *argv[]){
 
-  char** argvector= (char**) arg;
-  printf("created new thread with pid %d\n", getpid());
+  while(1){
 
-  execvp(argvector[0], argvector);
+    printf("miniShell-> ");
+    fflush(stdout);
 
-  return NULL;
-}
+    char* args[MAX_ARGS];
+    if(getArgs(args) == -1){
+      return -1;
+    }
 
-int main(int argc, char *argv[])
-{
-  pthread_t thread;
-  int t_result;
+    if(strcmp(args[0], "exit") == 0){
+      break;
+    }
 
-  char* args[MAX_ARGS];
-  if(getArgs(args) == -1){
-    return -1;
+    pid_t pid = fork();
+    if(pid == -1){
+      perror("Error creating fork");
+      continue;
+    }
+
+    if(pid == 0){
+      if(execvp(args[0], args) == -1){
+        perror("execvp failed");
+        exit(EXIT_FAILURE);
+      }
+    } else {
+      int status;
+      waitpid(pid, &status, 0);
+    }
+
   }
-
-
-  char* message = "hello world";
-  t_result = pthread_create(&thread, NULL, thread_exec, (void*) args);
-
-  pthread_join(thread, NULL);
-
   return 0;
 }
 
