@@ -3,14 +3,20 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 #define MAX_LEN_IN 2048
 #define MAX_ARG 100 
 #define MAX_ARGS 256 
 
 int getArgs(char* argv[]);
+void SIGINTHandler(int signal);
+
+volatile sig_atomic_t pid;
+volatile sig_atomic_t request_termination = 0;
 
 int main(int argc, char *argv[]){
+  signal(2, SIGINTHandler);
 
   while(1){
 
@@ -26,21 +32,24 @@ int main(int argc, char *argv[]){
       break;
     }
 
-    pid_t pid = fork();
+    pid = fork();
     if(pid == -1){
-      perror("Error creating fork");
+      perror("main-Error creating fork");
       continue;
     }
 
     if(pid == 0){
       if(execvp(args[0], args) == -1){
-        perror("execvp failed");
+        perror("main-execvp failed");
         exit(EXIT_FAILURE);
       }
     } else {
       int status;
       waitpid(pid, &status, 0);
+      pid = 0;
     }
+
+
 
   }
   return 0;
@@ -55,7 +64,7 @@ int getArgs(char* argv[]){
   int argc = 0;
 
   if(fgets(buffer, sizeof(buffer), stdin) == NULL){
-    perror("Error reading the input\n");
+    perror("getArgs-Error reading the input\n");
     return -1;
   }
 
@@ -69,4 +78,23 @@ int getArgs(char* argv[]){
   argv[argc] = NULL;
 
   return argc;
+}
+
+void SIGINTHandler(int signal){
+
+  const char msg1[] = "Signal encountered\n";
+  write(STDOUT_FILENO, msg1, sizeof(msg1) - 1);
+
+  if(pid != 0){
+    char msg2[256];
+    snprintf(msg2, sizeof(msg2), "found child process with pid %d, killing it\n", pid);
+    write(STDOUT_FILENO, msg2, sizeof(msg2) - 1);
+    kill(pid, SIGTERM);
+    pid = 0;
+    return;
+  }
+  const char msg3[] = "There is no child process, asking main process to terminate\n";
+  write(STDOUT_FILENO, msg3, sizeof(msg3) - 1);
+  request_termination = 1;
+  kill(getpid(), SIGTERM);
 }
