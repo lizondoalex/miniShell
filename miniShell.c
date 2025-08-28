@@ -11,12 +11,21 @@
 
 int getArgs(char* argv[]);
 void SIGINTHandler(int signal);
+void history_show(void);
+int history_open(void);
+void history_add(char**, int);
+void history_close(void);
 
 volatile sig_atomic_t pid;
 volatile sig_atomic_t request_termination = 0;
+FILE *history;
 
 int main(int argc, char *argv[]){
   signal(2, SIGINTHandler);
+  if(history_open() == -1){
+    perror("Failed to open/create history file\n");
+    return -1;
+  }
 
   while(1){
 
@@ -26,6 +35,11 @@ int main(int argc, char *argv[]){
     char* args[MAX_ARGS];
     if(getArgs(args) == -1){
       return -1;
+    }
+
+    if(strcmp(args[0], "history") == 0){
+      history_show();
+      continue;
     }
 
     if(strcmp(args[0], "exit") == 0){
@@ -44,6 +58,7 @@ int main(int argc, char *argv[]){
         exit(EXIT_FAILURE);
       }
     } else {
+      history_add(args, argc);
       int status;
       waitpid(pid, &status, 0);
       pid = 0;
@@ -96,5 +111,37 @@ void SIGINTHandler(int signal){
   const char msg3[] = "There is no child process, asking main process to terminate\n";
   write(STDOUT_FILENO, msg3, sizeof(msg3) - 1);
   request_termination = 1;
+  history_close();
   kill(getpid(), SIGTERM);
 }
+
+void history_close(void){
+  fclose(history);
+}
+
+int history_open(void){
+  history = fopen(".history", "a+");
+  fseek(history, 0, SEEK_END);
+
+  if(history == NULL){
+    return -1;
+  }
+}
+
+void history_add(char** args, int argc){
+  for(int i = 0; i<argc; i++){
+    fprintf(history, "%s", args[i]);
+  }
+  fprintf(history, "\n");
+}
+
+void history_show(void){
+  fseek(history, 0, SEEK_SET);
+  char buffer[128];
+  int i = 0;
+  while(fgets(buffer, sizeof(buffer), history) != NULL){
+    fprintf(stdout, "%d ", i++);
+    fputs(buffer, stdout);
+  }
+}
+
